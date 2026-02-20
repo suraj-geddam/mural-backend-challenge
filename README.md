@@ -34,9 +34,8 @@ Mural sandbox API keys are hardcoded in `src/config.ts` (per challenge FAQ #6). 
 The app is configured for Railway deployment:
 
 1. Connect the GitHub repo to a Railway project
-2. Add a PostgreSQL service and link it (Railway auto-sets `DATABASE_URL`)
+2. Add a PostgreSQL service and link it, set  `DATABASE_URL`
 3. Set `BASE_URL` to the Railway-provided domain
-4. Railway auto-detects the `Procfile` (`web: node dist/main.js`) and sets `PORT`
 
 ### Run tests
 
@@ -143,3 +142,4 @@ When an order totals $1.50, the system generates an amount like `1.500347` USDC.
 - **NUMERIC column types** for monetary amounts instead of `DOUBLE PRECISION`
 - **Background status sync** for withdrawal polling instead of synchronous per-request calls
 - **Monitoring/alerting** for failed payouts, unmatched deposits, webhook failures
+
