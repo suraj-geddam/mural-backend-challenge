@@ -1,98 +1,114 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Mural Marketplace API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Backend service for a marketplace where customers pay with USDC on Polygon and the merchant automatically receives Colombian Pesos (COP) in their bank account.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+Built with NestJS, PostgreSQL, and the Mural Pay sandbox API.
 
-## Description
+## Setup
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+### Prerequisites
 
-## Project setup
+- Node.js 18+
+- pnpm
+- PostgreSQL database
+
+### Install and run
 
 ```bash
-$ pnpm install
+pnpm install
+pnpm build
+
+# Set DATABASE_URL (required)
+export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/marketplace
+
+# Optional: set BASE_URL to enable Mural webhook auto-registration
+export BASE_URL=https://your-deployed-url.com
+
+node dist/main.js
 ```
 
-## Compile and run the project
+Mural sandbox API keys are hardcoded in `src/config.ts` (per challenge FAQ #6). Environment variable overrides are supported via `MURAL_API_KEY` and `MURAL_TRANSFER_KEY`.
+
+Swagger docs available at `/api-docs` once running.
+
+## API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/products` | List product catalog (5 seeded items, $0.50-$3.00) |
+| `POST` | `/orders` | Create an order (checkout) |
+| `GET` | `/orders/:id` | Get order status and payment instructions |
+| `GET` | `/merchant/orders` | List all orders with payment status |
+| `GET` | `/merchant/orders/:id` | Order detail with withdrawal info |
+| `GET` | `/merchant/withdrawals` | COP withdrawals with live Mural status polling |
+| `POST` | `/webhooks/mural` | Mural webhook receiver (ECDSA-verified) |
+
+### Example usage
 
 ```bash
-# development
-$ pnpm run start
+# List products
+curl $BASE_URL/products
 
-# watch mode
-$ pnpm run start:dev
+# Create an order (use a product ID from the catalog)
+curl -X POST $BASE_URL/orders \
+  -H 'Content-Type: application/json' \
+  -d '{"customerEmail":"buyer@example.com","items":[{"productId":"<ID>","quantity":1}]}'
 
-# production mode
-$ pnpm run start:prod
+# Check order status
+curl $BASE_URL/orders/<ORDER_ID>
+
+# Merchant: view all orders
+curl $BASE_URL/merchant/orders
+
+# Merchant: view COP withdrawal status
+curl $BASE_URL/merchant/withdrawals
 ```
 
-## Run tests
+## How it works
 
-```bash
-# unit tests
-$ pnpm run test
+1. **Checkout**: Customer creates an order via `POST /orders`. The system computes the total and adds a random sub-cent USDC fraction (0.000001-0.000999) to create a unique payment amount. This unique amount identifies the payment.
 
-# e2e tests
-$ pnpm run test:e2e
+2. **Payment**: Customer sends the exact USDC amount to the provided Polygon wallet address (outside the app). Mural fires a webhook when the deposit arrives.
 
-# test coverage
-$ pnpm run test:cov
-```
+3. **Deposit matching**: The webhook handler (`POST /webhooks/mural`) verifies the ECDSA signature, then matches the deposited amount to a pending order.
 
-## Deployment
+4. **Auto-conversion**: On match, the system automatically creates and executes a Mural payout request to convert USDC to COP and transfer to the merchant's Colombian bank account.
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+5. **Status tracking**: `GET /merchant/withdrawals` polls the Mural API for real-time payout status on each request.
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+## Deposit matching pitfalls
 
-```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
-```
+- **Collision risk**: Two concurrent orders at the same price have a ~1/999 chance of getting the same unique amount. Mitigated by collision checking at order creation, but a race condition window exists between check and insert.
+- **Exact amount required**: Partial or over-payments won't match. If an exchange deducts fees from the transfer amount, the deposit won't be recognized.
+- **No expiration**: Pending orders never expire. Stale orders occupy disambiguation slots indefinitely.
+- **Single deposit wallet**: All customers send to the same wallet. Amount-based matching is the sole disambiguation mechanism.
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## Current status
 
-## Resources
+**Working:**
+- Product catalog with 5 seeded items
+- Order creation with unique USDC amount generation and collision avoidance
+- Mural webhook endpoint with ECDSA signature verification
+- Deposit-to-order matching by amount
+- Automatic USDC-to-COP payout creation and execution on payment receipt
+- Merchant order list, order detail (with withdrawal info), and withdrawal status endpoints
+- Live payout status polling from Mural API on withdrawal queries
+- Bootstrap service: auto-discovers or creates a Mural API-enabled account, registers and activates webhook on startup
+- Swagger/OpenAPI at `/api-docs`
+- PostgreSQL persistence (Railway-hosted)
 
-Check out a few resources that may come in handy when working with NestJS:
+**Needs live verification:**
+- Full end-to-end flow with testnet USDC transfer triggering webhook, matching, and payout (depends on deployed URL being registered with Mural and webhook delivery working in sandbox)
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+## Future work
 
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+- **Per-order deposit addresses** to eliminate amount-based matching entirely
+- **Order expiration** (e.g., 30 min TTL) to free disambiguation slots
+- **Payout retry queue** with exponential backoff instead of fire-and-forget
+- **Idempotency keys** on payout requests to prevent duplicate conversions on webhook redelivery
+- **Authentication** on merchant endpoints (API key or JWT)
+- **Rate limiting** on public endpoints
+- **Strict webhook verification** (reject unsigned webhooks in production instead of accepting them)
+- **Database migrations** instead of `CREATE TABLE IF NOT EXISTS`
+- **Monitoring/alerting** for failed payouts, unmatched deposits, webhook failures
+- **Multi-currency** merchant withdrawals beyond COP
