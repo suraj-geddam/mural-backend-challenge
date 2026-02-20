@@ -111,9 +111,12 @@ export class OrdersService {
   private async initiateCopConversion(order: any) {
     await this.db.updateOrderStatus(order.id, 'withdrawal_initiated');
 
+    // Mural payout API requires at most 2 decimal places
+    const payoutAmount =
+      Math.floor(order.unique_amount_usdc * 100) / 100;
     const payoutReq = await this.mural.createPayoutRequest(
       CONFIG.muralAccountId,
-      order.unique_amount_usdc,
+      payoutAmount,
     );
     this.logger.log(
       `Created payout request ${payoutReq.id} for order ${order.id}`,
