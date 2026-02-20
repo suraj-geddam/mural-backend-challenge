@@ -41,8 +41,8 @@ export class WebhooksController {
     this.logger.log(`Webhook event: ${body.type || 'unknown'}`);
 
     if (body.type === 'account_credited') {
-      const tokenAmount = body.token?.tokenAmount;
-      const txHash = body.transactionDetails?.hash;
+      const tokenAmount = body.tokenAmount?.tokenAmount;
+      const txHash = body.transactionDetails?.transactionHash;
       if (tokenAmount) {
         const orderId = await this.ordersService.handleDeposit(
           tokenAmount,
