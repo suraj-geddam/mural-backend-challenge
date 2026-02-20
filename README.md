@@ -102,17 +102,19 @@ When an order totals $1.50, the system generates an amount like `1.500347` USDC.
 
 ### Known pitfalls
 
-- **Collision risk**: Two concurrent orders at the same base price have a ~1/999 chance of drawing the same micro-fraction. The app retries (up to 50 attempts), but there's a TOCTOU race between the collision check (`SELECT`) and the insert (`INSERT`). Fix: add a unique constraint on `unique_amount_usdc` where `status = 'pending_payment'`, or use a serializable transaction.
+- **Collision risk**: Two concurrent orders at the same base price have a ~1/999 chance of drawing the same micro-fraction. The app retries (up to 50 attempts) and a partial unique index (`idx_pending_unique_amount`) enforces uniqueness at the DB level, so the second insert fails rather than creating a duplicate. The retry loop handles this gracefully.
 
 - **Exact amount required**: The customer must send the *exact* USDC amount. If an exchange deducts network fees from the transferred amount, the deposit won't match any order. A production system would need tolerance bands or an overpayment/refund flow.
 
 - **No order expiration**: Pending orders never expire, so their unique amounts are permanently reserved. Over time this shrinks the available disambiguation space. Fix: expire orders after 30 minutes and free their slots.
 
-- **Single wallet for all customers**: If Mural supported per-deposit addresses (like exchange deposit addresses), amount-based matching would be unnecessary. This is the biggest architectural limitation.
+- **Sub-cent dust loss**: The customer pays a micro-fraction above the real price (e.g., 1.500347 USDC for a $1.50 order), but Mural's payout API only accepts 2 decimal places, so the COP conversion is for 1.50 USDC. The remaining 0.000347 USDC stays as dust in the Mural account. Over thousands of orders this accumulates.
+
+- **Single wallet for all customers**: All deposits go to the same wallet, making amount the only disambiguation signal. The production-grade alternative is **per-order deposit addresses**: use `POST /api/accounts` to create a dedicated Mural account (with its own wallet) for each order. The customer sends the exact dollar amount with no micro-fraction, the webhook identifies the order by which account was credited, and the full amount is converted to COP with no dust. The tradeoffs are added checkout latency (account creation + polling for ACTIVE status), a larger failure surface, and account sprawl requiring cleanup or reuse. But it eliminates collision risk, the exact-amount requirement, and dust loss in one architectural change.
 
 - **Floating-point matching**: The database uses `DOUBLE PRECISION` for amounts and matches with an epsilon of `0.000001`. This works but is fragile -- `NUMERIC` column types with exact comparison would be safer.
 
-- **No duplicate detection**: If Mural re-delivers a webhook for the same deposit, the system could create a duplicate payout. Fix: deduplicate by `transactionHash` or use Mural idempotency keys.
+- **Webhook redelivery**: If Mural re-delivers a webhook for the same deposit, a duplicate payout could occur. Mitigated by storing `deposit_tx_hash` on matched orders and skipping deposits with an already-seen transaction hash. Mural-level idempotency keys on payout requests would add a second layer of protection.
 
 ## Current status
 
@@ -133,8 +135,7 @@ When an order totals $1.50, the system generates an amount like `1.500347` USDC.
 - **Per-order deposit addresses** to eliminate amount-based matching entirely
 - **Order expiration** (e.g., 30 min TTL) to free disambiguation slots
 - **Payout retry queue** with exponential backoff instead of fire-and-forget
-- **Idempotency keys** on payout requests to prevent duplicate conversions on webhook redelivery
-- **Deduplication by transaction hash** to guard against webhook replays
+- **Idempotency keys** on Mural payout requests as a second layer against duplicate conversions
 - **Authentication** on merchant endpoints (API key or JWT)
 - **Rate limiting** on public endpoints
 - **Strict webhook verification** (reject unsigned webhooks in production)

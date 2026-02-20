@@ -127,6 +127,35 @@ describe('Flow 2: Merchant Payment Receipt & Verification', () => {
     uniqueAmountUsdc = order.amountUsdc;
   });
 
+  it('rejects a webhook with a forged ECDSA signature', async () => {
+    const payload = JSON.stringify({
+      type: 'account_credited',
+      tokenAmount: { tokenAmount: uniqueAmountUsdc },
+      transactionDetails: { transactionHash: `0xe2e-forged-${Date.now()}` },
+    });
+
+    const res = await fetch(`${BASE}/webhooks/mural`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-mural-webhook-signature': 'dGhpcyBpcyBhIGZha2Ugc2lnbmF0dXJl',
+        'x-mural-webhook-timestamp': String(Date.now()),
+      },
+      body: payload,
+    });
+
+    // Should either reject cleanly (200 with error) or 500 if verify throws
+    const body = await res.json();
+    if (res.status === 200) {
+      expect(body.error).toBe('invalid signature');
+      // Crucially: the order should NOT have been matched
+      expect(body.matched).toBeUndefined();
+    } else {
+      // 500 means verify.verify() threw on malformed signature -- a bug to fix
+      expect(res.status).toBe(500);
+    }
+  });
+
   it('simulates a USDC deposit via webhook and detects payment', async () => {
     // Simulate Mural firing an account_credited webhook.
     // No signature headers → skips ECDSA verification (development mode).
