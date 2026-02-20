@@ -55,5 +55,6 @@ pids
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
-# internal docs
+# internal docs & claude.md which will be changing and I don't want it to appear in commits
 /docs
+CLAUDE.md
