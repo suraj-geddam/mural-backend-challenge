@@ -22,6 +22,8 @@ async function bootstrap() {
     // Non-critical: may fail in read-only deployment environments
   }
 
-  await app.listen(process.env.PORT || 3000, '0.0.0.0');
+  const port = process.env.PORT || 3000;
+  await app.listen(port, '0.0.0.0');
+  console.log(`Listening on 0.0.0.0:${port}`);
 }
 bootstrap();
