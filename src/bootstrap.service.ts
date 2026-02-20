@@ -9,8 +9,16 @@ export class BootstrapService implements OnModuleInit {
   constructor(private mural: MuralService) {}
 
   async onModuleInit() {
-    await this.setupAccount();
-    await this.setupWebhook();
+    try {
+      await this.setupAccount();
+    } catch (err) {
+      this.logger.error(`Account setup failed: ${err.message}`);
+    }
+    try {
+      await this.setupWebhook();
+    } catch (err) {
+      this.logger.error(`Webhook setup failed: ${err.message}`);
+    }
   }
 
   private async setupAccount() {
