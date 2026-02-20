@@ -17,7 +17,7 @@ export const CONFIG = {
     recipientAddress: {
       address1: 'Calle 100 #19-61',
       city: 'Bogota',
-      state: 'CO-DC',
+      state: 'DC',
       country: 'CO',
       zip: '110111',
     },
