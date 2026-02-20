@@ -55,6 +55,13 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+
+      -- Prevent duplicate deposit processing on webhook redelivery
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS deposit_tx_hash TEXT;
+
+      -- Prevent two concurrent pending orders from getting the same unique amount
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_pending_unique_amount
+        ON orders (unique_amount_usdc) WHERE status = 'pending_payment';
     `);
   }
 
@@ -187,10 +194,25 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return rows.length > 0;
   }
 
+  async isDepositTxProcessed(txHash: string): Promise<boolean> {
+    const { rows } = await this.pool.query(
+      `SELECT 1 FROM orders WHERE deposit_tx_hash = $1`,
+      [txHash],
+    );
+    return rows.length > 0;
+  }
+
   async updateOrderStatus(id: string, status: string) {
     await this.pool.query(
       `UPDATE orders SET status = $1, updated_at = NOW() WHERE id = $2`,
       [status, id],
+    );
+  }
+
+  async setOrderDepositTx(id: string, txHash: string) {
+    await this.pool.query(
+      `UPDATE orders SET deposit_tx_hash = $1, updated_at = NOW() WHERE id = $2`,
+      [txHash, id],
     );
   }
 

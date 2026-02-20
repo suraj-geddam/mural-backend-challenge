@@ -89,6 +89,12 @@ export class OrdersService {
       `Deposit detected: ${tokenAmount} USDC, tx: ${transactionHash}`,
     );
 
+    // Deduplicate: skip if this transaction was already processed
+    if (transactionHash && await this.db.isDepositTxProcessed(transactionHash)) {
+      this.logger.warn(`Duplicate webhook for tx ${transactionHash}, skipping`);
+      return null;
+    }
+
     const order = await this.db.findPendingOrderByAmount(tokenAmount);
     if (!order) {
       this.logger.warn(`No pending order found for amount ${tokenAmount}`);
@@ -97,13 +103,17 @@ export class OrdersService {
 
     this.logger.log(`Matched deposit to order ${order.id}`);
     await this.db.updateOrderStatus(order.id, 'paid');
+    if (transactionHash) {
+      await this.db.setOrderDepositTx(order.id, transactionHash);
+    }
 
-    // Fire-and-forget COP conversion
-    this.initiateCopConversion(order).catch((err) =>
+    // Fire-and-forget COP conversion (mark failed on error instead of silently swallowing)
+    this.initiateCopConversion(order).catch(async (err) => {
       this.logger.error(
         `COP conversion failed for order ${order.id}: ${err.message}`,
-      ),
-    );
+      );
+      await this.db.updateOrderStatus(order.id, 'withdrawal_failed').catch(() => {});
+    });
 
     return order.id;
   }
