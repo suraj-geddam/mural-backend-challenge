@@ -4,6 +4,8 @@ Backend service for a marketplace where customers pay with USDC on Polygon and t
 
 Built with NestJS, PostgreSQL, and the Mural Pay sandbox API.
 
+> Built in under 3 hours (the challenge's hard limit) for a hiring challenge from Mural. It isn't deployed anywhere right now, but you can run it locally or deploy your own copy (see below).
+
 ## Setup
 
 ### Prerequisites
@@ -41,7 +43,7 @@ The app is configured for Railway deployment:
 
 ```bash
 pnpm test          # Unit tests
-pnpm test:e2e      # E2E tests against deployed app (uses BASE_URL env var)
+pnpm test:e2e      # E2E tests against a running instance (uses BASE_URL env var)
 ```
 
 Swagger docs available at `/api-docs` once running.
@@ -117,7 +119,7 @@ When an order totals $1.50, the system generates an amount like `1.500347` USDC.
 
 ## Current status
 
-**Verified working** (E2E tested against deployed app):
+**Verified working** (E2E tested against a Railway deployment):
 - Product catalog with 5 seeded items
 - Order creation with unique USDC amount generation and collision avoidance
 - Mural webhook endpoint with ECDSA signature verification
@@ -126,8 +128,7 @@ When an order totals $1.50, the system generates an amount like `1.500347` USDC.
 - Merchant dashboard: order list, order detail with withdrawal info, withdrawal status with live Mural polling
 - Bootstrap service: auto-discovers Mural account and registers webhook on startup
 - Swagger/OpenAPI at `/api-docs`
-- PostgreSQL persistence (Railway-hosted)
-- Deployed at https://mural-backend-challenge-production.up.railway.app
+- PostgreSQL persistence
 
 ## Future work
 
